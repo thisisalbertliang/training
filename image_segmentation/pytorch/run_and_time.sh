@@ -40,7 +40,8 @@ mllog_event(key=constants.CACHE_CLEAR, value=True)"
 # export GPU_NUM_DEVICES=1
 
 # For TPU
-export XRT_TPU_CONFIG="tpu_worker;0;$TPU_IP_ADDRESS:8470"
+export NO_CUDA=1
+export XRT_TPU_CONFIG="localservice;0;localhost:51011"
 
 
   python main.py --data_dir ${DATASET_DIR} \
