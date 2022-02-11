@@ -28,7 +28,7 @@ def main():
 
     flags = PARSER.parse_args()
 
-    # print(flags)
+    print(f"ALBERT: flags = {flags}")
 
     dllogger = get_dllogger(flags)
     local_rank = flags.local_rank
