@@ -5,9 +5,13 @@ import torch
 import torch.distributed as dist
 import numpy as np
 
+import torch_xla.core.xla_model as xm
 
-def get_device(local_rank):
-    if torch.cuda.is_available():
+
+def get_device(local_rank, use_xla: bool):
+    if use_xla:
+        device = xm.xla_device() # only support single-node training for XLA now
+    elif torch.cuda.is_available():
         torch.cuda.set_device(local_rank % torch.cuda.device_count())
         device = torch.device("cuda")
     else:
@@ -95,6 +99,9 @@ def get_world_size():
 
 
 def reduce_tensor(tensor, num_gpus):
+    print(f"ALBERT: entered reduce_tensor")
+    print(f"ALBERT: entered reduce_tensor({tensor}, {num_gpus})")
+
     if num_gpus > 1:
         rt = tensor.clone()
         dist.all_reduce(rt, op=dist.reduce_op.SUM)
@@ -103,6 +110,9 @@ def reduce_tensor(tensor, num_gpus):
         else:
             rt = rt // num_gpus
         return rt
+    
+    print(f"ALBERT: returning {tensor}")
+
     return tensor
 
 
