@@ -9,8 +9,14 @@ import torch_xla.core.xla_model as xm
 
 
 def get_device(local_rank, use_xla: bool):
+
+    print(f"ALBERT: entered get_device({local_rank}, {use_xla})")
+
     if use_xla:
         device = xm.xla_device() # only support single-node training for XLA now
+
+        print(f"ALBERT: returning device {device}")
+
     elif torch.cuda.is_available():
         torch.cuda.set_device(local_rank % torch.cuda.device_count())
         device = torch.device("cuda")
