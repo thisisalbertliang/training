@@ -29,7 +29,8 @@ def main():
     flags = PARSER.parse_args()
     dllogger = get_dllogger(flags)
     local_rank = flags.local_rank
-    device = get_device(local_rank)
+    device = get_device(local_rank, use_xla=flags.torch_xla)
+
     is_distributed = init_distributed()
     world_size = get_world_size()
     local_rank = get_rank()
