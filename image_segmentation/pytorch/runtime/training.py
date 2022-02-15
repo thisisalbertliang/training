@@ -3,10 +3,16 @@ from tqdm import tqdm
 import torch
 import torch.optim
 import torch.cuda.amp
-import torch_xla.amp
-import torch_xla.amp.syncfree
+try:
+    import torch_xla.amp
+    import torch_xla.amp.syncfree
+    import torch_xla.amp.grad_scaler
+except ImportError:
+    print(
+        "Missing packages: torch_xla.amp, torch_xla.amp.syncfree, torch_xla.amp.grad_scaler; "
+        "these packages are available in torch-xla>=1.11"
+    )
 import torch_xla.core.xla_model as xm
-import torch_xla.debug.metrics
 
 from runtime.distributed_utils import get_rank, reduce_tensor, get_world_size
 from runtime.inference import evaluate
@@ -35,6 +41,22 @@ def get_optimizer(params, flags):
     return optim
 
 
+def get_grad_scaler(flags):
+    if flags.torch_xla:
+        scaler = torch_xla.amp.grad_scaler.GradScaler()
+    else:
+        scaler = torch.cuda.amp.GradScaler()
+    return scaler
+
+
+def get_autocast(flags):
+    if flags.torch_xla:
+        autocast = torch_xla.amp.autocast
+    else:
+        autocast = torch.cuda.amp.autocast
+    return autocast
+
+
 def lr_warmup(optimizer, init_lr, lr, current_epoch, warmup_epochs):
     scale = current_epoch / warmup_epochs
     for param_group in optimizer.param_groups:
@@ -44,18 +66,17 @@ def lr_warmup(optimizer, init_lr, lr, current_epoch, warmup_epochs):
 def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, callbacks, is_distributed):
     rank = get_rank()
     world_size = get_world_size()
-    torch.backends.cudnn.benchmark = flags.cudnn_benchmark
-    torch.backends.cudnn.deterministic = flags.cudnn_deterministic
+    if not flags.torch_xla:
+        torch.backends.cudnn.benchmark = flags.cudnn_benchmark
+        torch.backends.cudnn.deterministic = flags.cudnn_deterministic
 
     optimizer = get_optimizer(model.parameters(), flags)
     if flags.lr_decay_epochs:
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                          milestones=flags.lr_decay_epochs,
                                                          gamma=flags.lr_decay_factor)
-    if flags.torch_xla:
-        scaler = torch_xla.amp.grad_scaler.GradScaler()
-    else:
-        scaler = torch.cuda.amp.GradScaler()
+    autocast = get_autocast(flags)
+    scaler = get_grad_scaler(flags)
 
     model.to(device)
     loss_fn.to(device)
@@ -89,7 +110,7 @@ def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, cal
             for callback in callbacks:
                 callback.on_batch_start()
 
-            with torch_xla.amp.autocast(enabled=flags.amp) if flags.torch_xla else torch.cuda.amp.autocast(enabled=flags.amp):
+            with autocast(enabled=flags.amp):
                 output = model(image)
                 loss_value = loss_fn(output, label)
                 loss_value /= flags.ga_steps

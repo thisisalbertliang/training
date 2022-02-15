@@ -4,12 +4,11 @@ import random
 import torch
 import torch.distributed as dist
 import numpy as np
-
 import torch_xla.core.xla_model as xm
 
 
-def get_device(local_rank, use_xla: bool):
-    if use_xla:
+def get_device(local_rank, flags):
+    if flags.torch_xla:
         device = xm.xla_device() # only support single-node training for XLA for now
     elif torch.cuda.is_available():
         torch.cuda.set_device(local_rank % torch.cuda.device_count())
