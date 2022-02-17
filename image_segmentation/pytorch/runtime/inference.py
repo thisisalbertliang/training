@@ -1,10 +1,12 @@
+import pdb
 import numpy as np
 from scipy import signal
 from tqdm import tqdm
 
 import torch
 import torch.nn.functional as F
-from torch.cuda.amp import autocast
+from runtime.amp_utils import get_autocast
+import torch_xla.core.xla_model as xm
 
 from runtime.distributed_utils import reduce_tensor, get_world_size, get_rank
 
@@ -25,10 +27,12 @@ def evaluate(flags, model, loader, loss_fn, score_fn, device, epoch=0, is_distri
 
     model.eval()
 
+    autocast = get_autocast(flags)
+
     eval_loss = []
     scores = []
     with torch.no_grad():
-        for i, batch in enumerate(tqdm(loader, disable=(rank != 0) or not flags.verbose)):
+        for i, batch in enumerate(loader):
             image, label = batch
             image, label = image.to(device), label.to(device)
             if image.numel() == 0:
@@ -140,10 +144,20 @@ def sliding_window_inference(inputs, labels, roi_shape, model, overlap=0.5, mode
                 j:(roi_shape[1] + j),
                 k:(roi_shape[2] + k)] += norm_patch
 
+                xm.mark_step()
+
 
     # account for any overlapping sections
     # norm_map[norm_map == 0] = norm_map[norm_map > 0].min()
+
+    xm.mark_step()
+
+    pdb.set_trace()
+
     result /= norm_map
+
+    # HANGS HERE!!!
+    xm.mark_step()
 
     return result[
            ...,

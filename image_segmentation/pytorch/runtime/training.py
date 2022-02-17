@@ -3,16 +3,16 @@ from tqdm import tqdm
 import torch
 import torch.optim
 import torch.cuda.amp
+from runtime.amp_utils import get_autocast, get_grad_scaler
 try:
-    import torch_xla.amp
     import torch_xla.amp.syncfree
-    import torch_xla.amp.grad_scaler
 except ImportError:
     print(
-        "Missing packages: torch_xla.amp, torch_xla.amp.syncfree, torch_xla.amp.grad_scaler; "
+        "Missing packages: torch_xla.amp.syncfree; "
         "these packages are available in torch-xla>=1.11"
     )
 import torch_xla.core.xla_model as xm
+import torch_xla.debug.metrics
 
 from runtime.distributed_utils import get_rank, reduce_tensor, get_world_size
 from runtime.inference import evaluate
@@ -39,22 +39,6 @@ def get_optimizer(params, flags):
     else:
         raise ValueError("Optimizer {} unknown.".format(flags.optimizer))
     return optim
-
-
-def get_grad_scaler(flags):
-    if flags.torch_xla:
-        scaler = torch_xla.amp.grad_scaler.GradScaler()
-    else:
-        scaler = torch.cuda.amp.GradScaler()
-    return scaler
-
-
-def get_autocast(flags):
-    if flags.torch_xla:
-        autocast = torch_xla.amp.autocast
-    else:
-        autocast = torch.cuda.amp.autocast
-    return autocast
 
 
 def lr_warmup(optimizer, init_lr, lr, current_epoch, warmup_epochs):
@@ -104,35 +88,42 @@ def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, cal
 
         loss_value = None
         optimizer.zero_grad()
-        for iteration, batch in enumerate(tqdm(train_loader, disable=(rank != 0) or not flags.verbose)):
-            image, label = batch
-            image, label = image.to(device), label.to(device)
-            for callback in callbacks:
-                callback.on_batch_start()
 
-            with autocast(enabled=flags.amp):
-                output = model(image)
-                loss_value = loss_fn(output, label)
-                loss_value /= flags.ga_steps
+        # ALBERT: WE SKIP TRAINING FOR NOW
+        # for iteration, batch in enumerate(tqdm(train_loader, disable=(rank != 0) or not flags.verbose)):
+        #     image, label = batch
+        #     image, label = image.to(device), label.to(device)
+        #     for callback in callbacks:
+        #         callback.on_batch_start()
 
-            if flags.amp:
-                scaler.scale(loss_value).backward()
-            else:
-                loss_value.backward()
+        #     with autocast(enabled=flags.amp):
+        #         output = model(image)
+        #         loss_value = loss_fn(output, label)
+        #         loss_value /= flags.ga_steps
 
-            if (iteration + 1) % flags.ga_steps == 0:
-                if flags.amp:
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    optimizer.step()
-                    if flags.torch_xla:
-                        xm.mark_step()
+        #     if flags.amp:
+        #         scaler.scale(loss_value).backward()
+        #     else:
+        #         loss_value.backward()
 
-                optimizer.zero_grad()
+        #     if (iteration + 1) % flags.ga_steps == 0:
+        #         if flags.amp:
+        #             scaler.step(optimizer)
+        #             scaler.update()
+        #         else:
+        #             optimizer.step()
+        #             if flags.torch_xla:
+        #                 xm.mark_step()
 
-            loss_value = reduce_tensor(loss_value, world_size).detach().cpu().numpy()
-            cumulative_loss.append(loss_value)
+        #         optimizer.zero_grad()
+
+        #     loss_value = reduce_tensor(loss_value, world_size).detach().cpu().numpy()
+        #     cumulative_loss.append(loss_value)
+
+        #     mllog_event(key="ALBERT-DEBUG-loss-value",
+        #                 value=loss_value,
+        #                 metadata={CONSTANTS.EPOCH_NUM: epoch, "iteration": iteration},
+        #                 sync=False)
 
         mllog_end(key=CONSTANTS.EPOCH_STOP, sync=False,
                   metadata={CONSTANTS.EPOCH_NUM: epoch, 'current_lr': optimizer.param_groups[0]['lr']})
@@ -142,16 +133,24 @@ def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, cal
 
         if epoch == next_eval_at:
             next_eval_at += flags.evaluate_every
-            del output
+            # del output
             mllog_start(key=CONSTANTS.EVAL_START, value=epoch, metadata={CONSTANTS.EPOCH_NUM: epoch}, sync=False)
 
             eval_metrics = evaluate(flags, model, val_loader, loss_fn, score_fn, device, epoch)
+            # eval_metrics = evaluate(flags, model, val_loader, loss_fn, score_fn, torch.device("cpu"), epoch)
+            # eval_metrics = evaluate(flags, model, val_loader, loss_fn, score_fn, torch.device("cuda:0"), epoch)
             eval_metrics["train_loss"] = sum(cumulative_loss) / len(cumulative_loss)
 
             mllog_event(key=CONSTANTS.EVAL_ACCURACY,
                         value=eval_metrics["mean_dice"],
                         metadata={CONSTANTS.EPOCH_NUM: epoch},
                         sync=False)
+
+            mllog_event(key="ptxla_metrics_report",
+                        value=torch_xla.debug.metrics.metrics_report(),
+                        metadata={CONSTANTS.EPOCH_NUM: epoch},
+                        sync=False)
+            
             mllog_end(key=CONSTANTS.EVAL_STOP, metadata={CONSTANTS.EPOCH_NUM: epoch}, sync=False)
 
             for callback in callbacks:
