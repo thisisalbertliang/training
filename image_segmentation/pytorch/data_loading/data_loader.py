@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
+import torch_xla.distributed.parallel_loader as pl
 
 from data_loading.pytorch_loader import PytVal, PytTrain
 from runtime.logging import mllog_event
@@ -76,7 +77,7 @@ class SyntheticDataset(Dataset):
         return self.x[idx % 32], self.y[idx % 32]
 
 
-def get_data_loaders(flags, num_shards, global_rank):
+def get_data_loaders(flags, num_shards, global_rank, device):
     if flags.loader == "synthetic":
         train_dataset = SyntheticDataset(scalar=True, shape=flags.input_shape, layout=flags.layout)
         val_dataset = SyntheticDataset(scalar=True, shape=flags.val_input_shape, layout=flags.layout)
@@ -106,5 +107,9 @@ def get_data_loaders(flags, num_shards, global_rank):
                                 num_workers=flags.num_workers,
                                 pin_memory=True,
                                 drop_last=False)
+    
+    if flags.torch_xla:
+        train_dataloader = pl.MpDeviceLoader(train_dataloader, device)
+        val_dataloader = pl.MpDeviceLoader(val_dataloader, device)
 
     return train_dataloader, val_dataloader

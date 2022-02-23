@@ -21,7 +21,7 @@ DATASET_SIZE = 168
 
 def main():
     mllog.config(filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'unet3d.log'))
-    mllog.config(filename=os.path.join("/results", 'unet3d.log'))
+    mllog.config(filename=os.path.join("results", 'unet3d.log'))
     mllogger = mllog.get_mllogger()
     mllogger.logger.propagate = False
     mllog_start(key=constants.INIT_START)
@@ -30,7 +30,6 @@ def main():
     dllogger = get_dllogger(flags)
     local_rank = flags.local_rank
     device = get_device(local_rank, flags)
-
     is_distributed = init_distributed()
     world_size = get_world_size()
     local_rank = get_rank()
@@ -49,7 +48,8 @@ def main():
 
     mllog_end(key=constants.INIT_STOP, sync=True)
     mllog_start(key=constants.RUN_START, sync=True)
-    train_dataloader, val_dataloader = get_data_loaders(flags, num_shards=world_size, global_rank=local_rank)
+    mllog_event(key="flags", value=str(flags), sync=False)
+    train_dataloader, val_dataloader = get_data_loaders(flags, num_shards=world_size, global_rank=local_rank, device=device)
     samples_per_epoch = world_size * len(train_dataloader) * flags.batch_size
     mllog_event(key='samples_per_epoch', value=samples_per_epoch, sync=False)
     flags.evaluate_every = flags.evaluate_every or ceil(20*DATASET_SIZE/samples_per_epoch)
