@@ -5,7 +5,8 @@ PARSER = argparse.ArgumentParser(description="UNet-3D")
 
 PARSER.add_argument('--data_dir', dest='data_dir', required=True)
 PARSER.add_argument('--log_dir', dest='log_dir', type=str, default="/tmp")
-PARSER.add_argument('--save_ckpt_path', dest='save_ckpt_path', type=str, default="")
+PARSER.add_argument('--save_ckpt_dir_path', dest='save_ckpt_dir_path', type=str, default="")
+PARSER.add_argument('--save_ckpt_every', dest="save_ckpt_every", type=int, default=None)
 PARSER.add_argument('--load_ckpt_path', dest='load_ckpt_path', type=str, default="")
 PARSER.add_argument('--loader', dest='loader', default="pytorch", type=str)
 PARSER.add_argument("--local_rank", default=os.environ.get("LOCAL_RANK", 0), type=int)
@@ -45,3 +46,6 @@ PARSER.add_argument('--overlap', dest='overlap', type=float, default=0.5)
 PARSER.add_argument('--include_background', dest='include_background', action='store_true', default=False)
 PARSER.add_argument('--cudnn_benchmark', dest='cudnn_benchmark', action='store_true', default=False)
 PARSER.add_argument('--cudnn_deterministic', dest='cudnn_deterministic', action='store_true', default=False)
+
+# PyTorch/XLA specific args
+PARSER.add_argument('--torch_xla', dest='torch_xla', action='store_true', default=False)

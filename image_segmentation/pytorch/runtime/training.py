@@ -1,20 +1,41 @@
 from tqdm import tqdm
 
 import torch
-from torch.optim import Adam, SGD
-from torch.cuda.amp import autocast, GradScaler
+import torch.optim
+import torch.cuda.amp
+try:
+    import torch_xla.amp
+    import torch_xla.amp.syncfree
+    import torch_xla.amp.grad_scaler
+except ImportError:
+    print(
+        "Missing packages: torch_xla.amp, torch_xla.amp.syncfree, torch_xla.amp.grad_scaler; "
+        "these packages are available in torch-xla>=1.11"
+    )
+import torch_xla.core.xla_model as xm
 
 from runtime.distributed_utils import get_rank, reduce_tensor, get_world_size
 from runtime.inference import evaluate
 from runtime.logging import mllog_event, mllog_start, mllog_end, CONSTANTS
 
+import torch_xla.core.xla_model as xm
+from torch_xla.debug.metrics import metrics_report
+import os
+
 
 def get_optimizer(params, flags):
     if flags.optimizer == "adam":
-        optim = Adam(params, lr=flags.learning_rate, weight_decay=flags.weight_decay)
+        if flags.torch_xla and flags.amp:
+            optim = torch_xla.amp.syncfree.Adam(params, lr=flags.learning_rate, weight_decay=flags.weight_decay)
+        else:
+            optim = torch.optim.Adam(params, lr=flags.learning_rate, weight_decay=flags.weight_decay)
     elif flags.optimizer == "sgd":
-        optim = SGD(params, lr=flags.learning_rate, momentum=flags.momentum, nesterov=True,
-                    weight_decay=flags.weight_decay)
+        if flags.torch_xla and flags.amp:
+            optim = torch_xla.amp.syncfree.SGD(params, lr=flags.learning_rate, momentum=flags.momentum, nesterov=True, 
+                                weight_decay=flags.weight_decay)
+        else:
+            optim = torch.optim.SGD(params, lr=flags.learning_rate, momentum=flags.momentum, nesterov=True,
+                        weight_decay=flags.weight_decay)
     elif flags.optimizer == "lamb":
         import apex
         optim = apex.optimizers.FusedLAMB(params, lr=flags.learning_rate, betas=flags.lamb_betas,
@@ -22,6 +43,22 @@ def get_optimizer(params, flags):
     else:
         raise ValueError("Optimizer {} unknown.".format(flags.optimizer))
     return optim
+
+
+def get_grad_scaler(flags):
+    if flags.torch_xla:
+        scaler = torch_xla.amp.grad_scaler.GradScaler()
+    else:
+        scaler = torch.cuda.amp.GradScaler()
+    return scaler
+
+
+def get_autocast(flags):
+    if flags.torch_xla:
+        autocast = torch_xla.amp.autocast
+    else:
+        autocast = torch.cuda.amp.autocast
+    return autocast
 
 
 def lr_warmup(optimizer, init_lr, lr, current_epoch, warmup_epochs):
@@ -33,17 +70,20 @@ def lr_warmup(optimizer, init_lr, lr, current_epoch, warmup_epochs):
 def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, callbacks, is_distributed):
     rank = get_rank()
     world_size = get_world_size()
-    torch.backends.cudnn.benchmark = flags.cudnn_benchmark
-    torch.backends.cudnn.deterministic = flags.cudnn_deterministic
+    if not flags.torch_xla:
+        torch.backends.cudnn.benchmark = flags.cudnn_benchmark
+        torch.backends.cudnn.deterministic = flags.cudnn_deterministic
+
+    model.train().to(device)
 
     optimizer = get_optimizer(model.parameters(), flags)
     if flags.lr_decay_epochs:
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                          milestones=flags.lr_decay_epochs,
                                                          gamma=flags.lr_decay_factor)
-    scaler = GradScaler()
+    autocast = get_autocast(flags)
+    scaler = get_grad_scaler(flags)
 
-    model.to(device)
     loss_fn.to(device)
     if is_distributed:
         model = torch.nn.parallel.DistributedDataParallel(model,
@@ -53,7 +93,6 @@ def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, cal
     is_successful = False
     diverged = False
     next_eval_at = flags.start_eval_at
-    model.train()
     for callback in callbacks:
         callback.on_fit_start()
     for epoch in range(1, flags.epochs + 1):
@@ -68,8 +107,8 @@ def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, cal
             train_loader.sampler.set_epoch(epoch)
 
         loss_value = None
-        optimizer.zero_grad()
         for iteration, batch in enumerate(tqdm(train_loader, disable=(rank != 0) or not flags.verbose)):
+            optimizer.zero_grad()
             image, label = batch
             image, label = image.to(device), label.to(device)
             for callback in callbacks:
@@ -92,23 +131,50 @@ def train(flags, model, train_loader, val_loader, loss_fn, score_fn, device, cal
                 else:
                     optimizer.step()
 
-                optimizer.zero_grad()
+            if flags.torch_xla:
+                xm.mark_step()
 
             loss_value = reduce_tensor(loss_value, world_size).detach().cpu().numpy()
             cumulative_loss.append(loss_value)
+            mllog_event(key="train-loss", value=loss_value, metadata={CONSTANTS.EPOCH_NUM: epoch, "iteration": iteration}, sync=False)
 
         mllog_end(key=CONSTANTS.EPOCH_STOP, sync=False,
                   metadata={CONSTANTS.EPOCH_NUM: epoch, 'current_lr': optimizer.param_groups[0]['lr']})
 
+        if flags.torch_xla:
+            # log PT-XLA metrics report and XLA device memory info
+            # at the end of each epoch
+            mllog_end(
+                key="PT-XLA_metrics_report",
+                value=metrics_report(),
+                metadata={CONSTANTS.EPOCH_NUM: epoch}
+            )
+            mllog_end(
+                key="PT-XLA_device_memory",
+                value=xm.get_memory_info(device),
+                metadata={CONSTANTS.EPOCH_NUM: epoch}
+            )
+
         if flags.lr_decay_epochs:
             scheduler.step()
+
+        if flags.save_ckpt_every and epoch % flags.save_ckpt_every == 0:
+            # save UNet3D model state dict
+            model_state_dict_save_path = os.path.join(flags.save_ckpt_dir_path, f"model_state_dict_on_epoch_{epoch}.pt")
+            torch.save(model.state_dict(), model_state_dict_save_path)
+            mllog_event(key="saved-model-state-dict", value=model_state_dict_save_path)
+
 
         if epoch == next_eval_at:
             next_eval_at += flags.evaluate_every
             del output
             mllog_start(key=CONSTANTS.EVAL_START, value=epoch, metadata={CONSTANTS.EPOCH_NUM: epoch}, sync=False)
 
-            eval_metrics = evaluate(flags, model, val_loader, loss_fn, score_fn, device, epoch)
+            if flags.torch_xla:
+                # PT-XLA currently only supports running model evaluation on CPU
+                eval_metrics = evaluate(flags, model, val_loader, loss_fn, score_fn, torch.device('cpu'), epoch)
+            else:
+                eval_metrics = evaluate(flags, model, val_loader, loss_fn, score_fn, device, epoch)
             eval_metrics["train_loss"] = sum(cumulative_loss) / len(cumulative_loss)
 
             mllog_event(key=CONSTANTS.EVAL_ACCURACY,

@@ -26,12 +26,12 @@ then
     echo "STARTING TIMING RUN AT $start_fmt"
 
 # CLEAR YOUR CACHE HERE
-  python -c "
+  python3 -c "
 from mlperf_logging.mllog import constants
 from runtime.logging import mllog_event
 mllog_event(key=constants.CACHE_CLEAR, value=True)"
 
-  python main.py --data_dir ${DATASET_DIR} \
+  python3 main.py --data_dir ${DATASET_DIR} \
     --epochs ${MAX_EPOCHS} \
     --evaluate_every ${EVALUATE_EVERY} \
     --start_eval_at ${START_EVAL_AT} \

@@ -117,6 +117,55 @@ The `runtime/` folder contains scripts with training and inference logic. Its co
 * `logging.py`: Defines the MLPerf logger.
 * `training.py`: Defines the training loop.
 
+## Parameters
+ 
+The complete list of the available parameters for the main.py script contains:
+
+### Input/Output parameters
+* `--data_dir`: Set the input directory containing the dataset (Required, default: `None`).
+* `--log_dir`: Set the output directory for logs (default: `/tmp`).
+* `--save_ckpt_dir_path`: Directory path to save the checkpoint to (default: `None`). 
+* `--save_ckpt_every`: Epoch interval for saving the UNet3D model state dict (default: `None`, which only saves the model state dict after training ends)
+* `--load_ckpt_path`: Path with a filename to load the checkpoint from (default: `None`). 
+* `--loader`: Loader to use (default: `pytorch`).
+* `--local_rank`: Local rank for distributed training (default: `os.environ.get("LOCAL_RANK", 0)`).
+
+### Runtime parameters
+* `--exec_mode`: Select the execution mode to run the model (default: `train`). Modes available:
+  * `train` - trains a model with given parameters. 
+  * `evaluate` - loads checkpoint (if available) and performs evaluation on validation subset.
+* `--batch_size`: Size of each minibatch per GPU (default: `2`).
+* `--ga_steps`: Number of steps for gradient accumulation (default: `1`).
+* `--epochs`: Maximum number of epochs for training (default: `1`).
+* `--evaluate_every`: Epoch interval for evaluation (default: `20`).
+* `--start_eval_at`: First epoch to start running evaluation at (default: `1000`).
+* `--layout`: Data layout (default: `NCDHW`. `NDHWC` is not implemented).
+* `--input_shape`: Input shape for images during training (default: `[128, 128, 128]`).
+* `--val_input_shape`: Input shape for images during evaluation (default: `[128, 128, 128]`).
+* `--seed`: Set random seed for reproducibility (default: `-1` - picks a random number from `/dev/urandom`).
+* `--num_workers`: Number of workers used for dataloading (default: `8`).
+* `--benchmark`: Enable performance benchmarking (disabled by default). If the flag is set, the script runs in a benchmark mode - each iteration is timed and the performance result (in images per second) is printed at the end.
+* `--warmup_steps`: Used only for during benchmarking - the number of steps to skip (default: `200`). First iterations are usually much slower since the graph is being constructed. Skipping the initial iterations is required for a fair performance assessment.
+* `--amp`: Enable automatic mixed precision (disabled by default).
+* `--torch_xla`: Enable PyTorch/XLA acceleration (disabled by default)
+
+### Optimizer parameters
+* `--optimizer`: Type of optimizer to use (default: `sgd`, choices=`sgd, adam, lamb`).
+* `--learning_rate`: Learning rate (default: `1.0`).
+* `--momentum`: Momentum for SGD optimizer (default: `0.9`).
+* `--init_learning_rate`: Initial learning rate used for learning rate warm up (default: `1e-4`).
+* `--lr_warmup_epochs`: Number of epochs for learning rate warm up (default: `0`).
+* `--lr_decay_epochs`: Milestones for MultiStepLR learning rate decay (default: `None`).
+* `--lr_decay_factor`: Factor for MultiStepLR learning rate decay (default: `1.0`).
+* `--lamb_betas`: Beta1 and Beta2 parameters for LAMB optimizer (default: `0.9, 0.999`).
+* `--weight_decay`: Weight decay factor (default: `0.0`).
+
+### Other parameters
+* `--verbose`: Whether to display `tqdm` progress bars during training (default: `False`).
+* `--oversampling`: Oversampling for biased crop (default: `0.4`).
+* `--overlap`: Overlap for sliding window (default: `0.5`).
+* `--cudnn_benchmark`: Whether to use cuDNN benchmark (default: `False`).
+* `--cudnn_deterministic`: Whether to use cuDNN deterministic (default: `False`).
  
 # 3. Quality
 
