@@ -17,7 +17,7 @@ class TestXLATrainer(unittest.TestCase):
         """Initializes XLATrainer object"""
         self.batch_size = 1
         self.image_size = (128, 128, 128)
-        flags = Namespace(
+        self.flags = Namespace(
             amp=False,
             ga_steps=1,
             layout="NCDHW",
@@ -26,7 +26,6 @@ class TestXLATrainer(unittest.TestCase):
             input_shape=self.image_size,
             val_input_shape=self.image_size,
             benchmark=False,
-            num_workers=8,
             optimizer="sgd",
             learning_rate=0.8,
             momentum=0.9,
@@ -37,59 +36,57 @@ class TestXLATrainer(unittest.TestCase):
             torch_xla=True,
         )
 
-        init_distributed(flags)
+        init_distributed(self.flags)
 
-        model = Unet3D(
+        self.device = xm.xla_device()
+        self.model = Unet3D(
             1,
             3,
             normalization="instancenorm",
             activation="relu",
         )
-
-        self.device = xm.xla_device()
-        train_loader, val_loader = get_data_loaders(
-            flags=flags,
-            num_shards=1,
-            global_rank=0,
-            device=self.device,
-        )
-
-        loss_fn = DiceCELoss(
+        self.loss_fn = DiceCELoss(
             to_onehot_y=True,
             use_softmax=True,
-            layout=flags.layout,
-            include_background=flags.include_background,
+            layout=self.flags.layout,
+            include_background=self.flags.include_background,
         )
-        score_fn = DiceScore(
+        self.score_fn = DiceScore(
             to_onehot_y=True,
             use_argmax=True,
-            layout=flags.layout,
-            include_background=flags.include_background,
+            layout=self.flags.layout,
+            include_background=self.flags.include_background,
         )
+        self.input_size = (self.batch_size, 1) + self.image_size
 
-        self.xla_trainer = XLATrainer(
-            flags=flags,
-            model=model,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            loss_fn=loss_fn,
-            score_fn=score_fn,
-            device=self.device,
-            callbacks=[],
-        )
+    def test_forward_and_backward_pass(self):
+        """Smoke test for forward & backward pass"""
+        for num_workers in (1, 8):
+            self.flags.num_workers = num_workers
 
-        input_size = (self.batch_size, 1) + self.image_size
+            train_loader, val_loader = get_data_loaders(
+                flags=self.flags,
+                num_shards=1,
+                global_rank=0,
+                device=self.device,
+            )
 
-        self.image = torch.zeros(size=input_size, device=self.device)
-        self.label = torch.zeros_like(self.image, device=self.device)
+            xla_trainer = XLATrainer(
+                flags=self.flags,
+                model=self.model,
+                train_loader=train_loader,
+                val_loader=val_loader,
+                loss_fn=self.loss_fn,
+                score_fn=self.score_fn,
+                device=self.device,
+                callbacks=[],
+            )
 
-    def test_forward_pass(self):
-        """Smoke test for forward pass"""
-        loss_value = self.xla_trainer.forward_pass(self.image, self.label)
+            image = torch.zeros(size=self.input_size, device=self.device)
+            label = torch.zeros_like(image, device=self.device)
 
-        self.assertEqual(loss_value.size(), torch.Size([]))
+            loss_value = xla_trainer.forward_pass(image, label)
 
-    def test_backward_pass(self):
-        """Smoke test for backward pass"""
-        loss_value = self.xla_trainer.forward_pass(self.image, self.label)
-        self.xla_trainer.backward_pass(iteration=0, loss_value=loss_value)
+            self.assertEqual(loss_value.size(), torch.Size([]))
+
+            xla_trainer.backward_pass(iteration=0, loss_value=loss_value)
