@@ -13,7 +13,7 @@ from torch.optim import SGD, Adam
 
 
 class UNet3DTrainer(ABC):
-    """Base class for training UNet3D in PyTorch CUDA and PyTorch/XLA"""
+    """Base class for training UNet3D in PyTorch"""
 
     def __init__(
         self,
@@ -38,8 +38,8 @@ class UNet3DTrainer(ABC):
         self.loss_fn: torch.nn.Module = loss_fn
 
         # move model and loss_fn to device
-        self.model.to(device)
-        self.loss_fn.to(device)
+        self.model.to(self.device)
+        self.loss_fn.to(self.device)
         # setup optimizer
         self.optimizer = UNet3DTrainer.get_optimizer(self.model.parameters(), flags)
         if flags.lr_decay_epochs:
