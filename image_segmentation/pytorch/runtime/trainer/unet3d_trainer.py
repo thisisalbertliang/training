@@ -94,13 +94,13 @@ class UNet3DTrainer(ABC):
             for iteration, batch in enumerate(self.train_loader):
                 self.optimizer.zero_grad()
 
-                image, label = batch
-                image, label = image.to(self.device), label.to(self.device)
+                images, labels = batch
+                images, labels = images.to(self.device), labels.to(self.device)
 
                 for callback in self.callbacks:
                     callback.on_batch_start()
 
-                loss_value = self.forward_pass(image, label)
+                loss_value = self.forward_pass(images, labels)
                 self.backward_pass(iteration, loss_value)
 
                 loss_value = reduce_tensor(loss_value).detach().cpu().numpy()
@@ -195,12 +195,11 @@ class UNet3DTrainer(ABC):
                 break
 
     @abstractmethod
-    def forward_pass(self, image: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
-        """
-        Runs the model forward pass on the image and label
+    def forward_pass(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        """Runs the model forward pass on the images and labels
 
-        :param torch.Tensor image: the input image from train data
-        :param torch.Tensor label: the label associated with the input image from train data
+        :param torch.Tensor images: the input images with shape (batch_size, channel_size, x_size, y_size, z_size)
+        :param torch.Tensor labels: the labels associated with the input images from train data. Labels should have the same shape as the images
         :return: the loss value
         :rtype: torch.Tensor
         """
@@ -208,8 +207,7 @@ class UNet3DTrainer(ABC):
 
     @abstractmethod
     def backward_pass(self, iteration: int, loss_value: torch.Tensor):
-        """
-        Runs the model backward pass, given the loss value from the forward pass
+        """Runs the model backward pass, given the loss value from the forward pass
 
         :param int iteration: the iteration number in the current epoch
         :param torch.Tensor loss_value: the loss value from the forward pass
@@ -224,8 +222,7 @@ class UNet3DTrainer(ABC):
         current_epoch: int,
         warmup_epochs: int,
     ):
-        """
-        Warms up learning rate for the current epoch
+        """Warms up learning rate for the current epoch
 
         :param torch.optim.Optimizer optimizer: the optimizer
         :param int init_lr: the initial learning rate
@@ -239,8 +236,7 @@ class UNet3DTrainer(ABC):
 
     @staticmethod
     def get_optimizer(params: Iterator[Parameter], flags: Namespace) -> torch.optim.Optimizer:
-        """
-        Initializes the optimizer with the model weights
+        """Initializes the optimizer with the model weights
 
         :param Iterator[Parameter] params: the model weights
         :param Namespace flags: the runtime arguments
