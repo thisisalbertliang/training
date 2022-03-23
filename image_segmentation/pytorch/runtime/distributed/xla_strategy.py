@@ -50,7 +50,7 @@ class XLAStrategy(DistributedStrategy):
         world_size = self.get_world_size()
         if world_size > 1:
             rt = tensor.clone()
-            xm.all_reduce(
+            rt = xm.all_reduce(
                 xm.REDUCE_SUM,
                 rt,
             )
