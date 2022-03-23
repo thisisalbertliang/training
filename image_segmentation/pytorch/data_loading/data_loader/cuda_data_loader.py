@@ -11,8 +11,7 @@ def get_data_loaders(
     train_dataset: Dataset,
     val_dataset: Dataset,
 ) -> Tuple[DataLoader, DataLoader]:
-    """
-    Initializes and returns (train_data_loader, val_data_loader) as Dataloader objects
+    """Initializes and returns (train_data_loader, val_data_loader) as Dataloader objects
 
     :param Namespace flags: the runtime arguments
     :param int num_shards: number of shards for the train dataset
