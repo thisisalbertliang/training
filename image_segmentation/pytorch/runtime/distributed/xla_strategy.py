@@ -38,7 +38,7 @@ class XLAStrategy(DistributedStrategy):
         """Overrides DistributedStrategy.broadcast_seeds"""
         if self.get_world_size() > 1:
             seeds_tensor = torch.LongTensor(seeds).to(device)
-            self._broadcast(seeds_tensor, 0)
+            seeds_tensor = self._broadcast(seeds_tensor, 0)
             seeds = seeds_tensor.tolist()
         return seeds
 
@@ -58,7 +58,7 @@ class XLAStrategy(DistributedStrategy):
             return rt
         return tensor
 
-    def _broadcast(self, tensor: torch.Tensor, source_rank: int):
+    def _broadcast(self, tensor: torch.Tensor, source_rank: int) -> torch.Tensor:
         # only broadcast when there are more than one process
         if self.get_world_size() > 1:
             # fill the worker tensors with zeros
@@ -66,7 +66,8 @@ class XLAStrategy(DistributedStrategy):
                 tensor.fill_(0)
             # since only the master tensor is non-zero,
             # all-reduce is equivalent to broadcast
-            xm.all_reduce(
+            tensor = xm.all_reduce(
                 reduce_type=xm.REDUCE_SUM,
                 inputs=tensor,
             )
+            return tensor
