@@ -1,17 +1,14 @@
 import glob
 import os
 from argparse import Namespace
-from ctypes import Union
-from typing import Tuple
 
 import data_loading.data_loader.cuda_data_loader as cl
 import data_loading.data_loader.xla_data_loader as xl
 import numpy as np
 import torch
-import torch_xla.distributed.parallel_loader as pl
 from data_loading.pytorch_loader import PytTrain, PytVal
 from runtime.logging import mllog_event
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 
 def list_files_with_pattern(path, files_pattern):
@@ -98,8 +95,7 @@ class SyntheticDataset(Dataset):
 
 
 def get_data_loaders(flags: Namespace, num_shards: int, global_rank: int, device: torch.device):
-    """
-    Initializes and returns (train_data_loader, val_data_loader)
+    """Initializes and returns (train_data_loader, val_data_loader)
 
     :param Namespace flags: the runtime arguments
     :param int num_shards: number of shards for the train dataset
@@ -128,12 +124,14 @@ def get_data_loaders(flags: Namespace, num_shards: int, global_rank: int, device
     else:
         raise ValueError(f"Loader {flags.loader} unknown. Valid loaders are: synthetic, pytorch")
 
-    if flags.torch_xla:
+    if flags.device == "xla":
         train_loader, val_loader = xl.get_data_loaders(
             flags, num_shards, global_rank, device, train_dataset, val_dataset
         )
-    else:
+    elif flags.device == "cuda":
         train_loader, val_loader = cl.get_data_loaders(
             flags, num_shards, train_dataset, val_dataset
         )
+    else:
+        raise ValueError(f"Device {flags.device} unknown. Valid devices are: cuda, xla")
     return train_loader, val_loader
