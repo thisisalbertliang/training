@@ -10,24 +10,21 @@ class XLAStrategy(DistributedStrategy):
 
     def __init__(self) -> None:
         super().__init__()
-        world_size = xm.xrt_world_size()
+        world_size = self.get_world_size()
         if xm.is_master_ordinal():
             print(f"torch-xla distributed initialized. World size: {world_size}")
 
     def get_rank(self) -> int:
         """Overrides DistributedStrategy.get_rank"""
-        rank = xm.get_ordinal()
-        return rank
+        return xm.get_ordinal()
 
     def get_world_size(self) -> int:
         """Overrides DistributedStrategy.get_world_size"""
-        world_size = xm.xrt_world_size()
-        return world_size
+        return xm.xrt_world_size()
 
     def get_device(self, local_rank: int) -> torch.device:
         """Overrides DistributedStrategy.get_device"""
-        xla_device = xm.xla_device()
-        return xla_device
+        return xm.xla_device()
 
     def barrier(self):
         """Overrides DistributedStrategy.barrier"""
