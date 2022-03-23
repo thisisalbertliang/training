@@ -88,7 +88,7 @@ def broadcast_seeds(seeds: List[int], device: torch.device) -> List[int]:
 
 
 def setup_seeds(
-    master_seed: int, epochs: int, device: torch.device
+    epochs: int, device: torch.device, master_seed: Optional[int] = None
 ) -> Tuple[List[int], List[int]]:
     """Generates seeds from one master_seed.
 
@@ -99,13 +99,14 @@ def setup_seeds(
     Seeds are generated on worker with rank 0 and broadcasted to all other
     workers.
 
-    :param int master_seed: master RNG seed used to initialize other generators
+    :param Optional[int] master_seed: master RNG seed used to initialize other generators
+        if None, a random master_seed is generated
     :param int epochs: number of epochs
     :param torch.device device: backend device used for distributed broadcast
     :return: (worker_seeds, shuffling_seeds)
     :rtype: Tuple[List[int], List[int]]
     """
-    if master_seed == -1:
+    if master_seed is None:
         # random master seed, random.SystemRandom() uses /dev/urandom on Unix
         master_seed = random.SystemRandom().randint(0, 2**32 - 1)
         if get_rank() == 0:

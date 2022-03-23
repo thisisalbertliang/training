@@ -1,4 +1,3 @@
-import os
 import argparse
 
 PARSER = argparse.ArgumentParser(description="UNet-3D")
@@ -19,7 +18,7 @@ PARSER.add_argument('--batch_size', dest='batch_size', type=int, default=2)
 PARSER.add_argument('--layout', dest='layout', type=str, choices=['NCDHW'], default='NCDHW')
 PARSER.add_argument('--input_shape', nargs='+', type=int, default=[128, 128, 128])
 PARSER.add_argument('--val_input_shape', nargs='+', type=int, default=[128, 128, 128])
-PARSER.add_argument('--seed', dest='seed', default=-1, type=int)
+PARSER.add_argument('--seed', dest='seed', default=None, type=int)
 PARSER.add_argument('--num_workers', dest='num_workers', type=int, default=8)
 PARSER.add_argument('--exec_mode', dest='exec_mode', choices=['train', 'evaluate'], default='train')
 
