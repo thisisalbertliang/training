@@ -42,10 +42,10 @@ class XLATrainer(UNet3DTrainer):
         # Get hardware type
         self.hw_type = xm.xla_device_hw(self.device)
 
-    def forward_pass(self, image: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+    def forward_pass(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         """Overrides UNet3DTrainer.forward_pass"""
         with torch_xla.amp.autocast(enabled=self.flags.amp):
-            output = self.model(image)
+            output = self.model(images)
             if self.hw_type == "GPU":
                 # currently, running torch-xla on GPU requires sandwiching
                 # the loss value computation in between mark_step, otherwise
@@ -53,7 +53,7 @@ class XLATrainer(UNet3DTrainer):
                 # this is a temporary solution, and these two mark_step will
                 # be removed once this memory corruption bug is resolved in torch-xla
                 xm.mark_step()
-            loss_value = self.loss_fn(output, label)
+            loss_value = self.loss_fn(output, labels)
             if self.hw_type == "GPU":
                 xm.mark_step()
             loss_value /= self.flags.ga_steps

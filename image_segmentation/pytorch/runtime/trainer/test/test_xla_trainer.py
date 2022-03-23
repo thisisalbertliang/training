@@ -82,10 +82,10 @@ class TestXLATrainer(unittest.TestCase):
                 callbacks=[],
             )
 
-            image = torch.zeros(size=self.input_size, device=self.device)
-            label = torch.zeros_like(image, device=self.device)
+            images = torch.zeros(size=self.input_size, device=self.device)
+            labels = torch.zeros_like(images, device=self.device)
 
-            loss_value = xla_trainer.forward_pass(image, label)
+            loss_value = xla_trainer.forward_pass(images, labels)
 
             self.assertEqual(loss_value.size(), torch.Size([]))
 
