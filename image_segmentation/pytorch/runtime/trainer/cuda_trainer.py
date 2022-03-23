@@ -43,11 +43,11 @@ class CUDATrainer(UNet3DTrainer):
         # Setup train sampler
         self.train_sampler = self.train_loader.sampler
 
-    def forward_pass(self, image: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+    def forward_pass(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         """Overrides UNet3DTrainer.forward_pass"""
         with torch.cuda.amp.autocast(enabled=self.flags.amp):
-            output = self.model(image)
-            loss_value = self.loss_fn(output, label)
+            output = self.model(images)
+            loss_value = self.loss_fn(output, labels)
             loss_value /= self.flags.ga_steps
         return loss_value
 
