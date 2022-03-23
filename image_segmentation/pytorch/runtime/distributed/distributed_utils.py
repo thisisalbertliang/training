@@ -1,5 +1,6 @@
 import random
-from typing import List, Tuple
+from functools import wraps
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -7,26 +8,28 @@ from runtime.distributed.cuda_strategy import CUDAStrategy
 from runtime.distributed.distributed_strategy import DistributedStrategy
 from runtime.distributed.xla_strategy import XLAStrategy
 
-_STRATEGY: DistributedStrategy = None
+_STRATEGY: Optional[DistributedStrategy] = None
 
 
 def init_distributed(flags) -> bool:
-    """
-    Initializes the distributed backends (either PyTorch CUDA or PyTorch/XLA)
+    """Initializes the distributed backends (either PyTorch CUDA or PyTorch/XLA)
 
     :param flags: the runtime arguments
     :return: false if using single core training, true otherwise
     :rtype: bool
     """
     global _STRATEGY
-    if flags.torch_xla:
+    if flags.device == "xla":
         _STRATEGY = XLAStrategy()
-    else:
+    elif flags.device == "cuda":
         _STRATEGY = CUDAStrategy()
+    else:
+        raise ValueError(f"Device {flags.device} unknown. Valid devices are: cuda, xla")
     return get_world_size() > 1
 
 
 def _assert_initialized(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         assert _STRATEGY is not None, (
             "Please initialize the distributed_utils module first "
@@ -39,8 +42,7 @@ def _assert_initialized(func):
 
 @_assert_initialized
 def get_device(local_rank: int) -> torch.device:
-    """
-    Sets and gets the backend device associated with the local rank
+    """Sets and gets the backend device associated with the local rank
 
     :param int local_rank: the local rank for the backend device
     :return: the backend device
@@ -51,8 +53,7 @@ def get_device(local_rank: int) -> torch.device:
 
 @_assert_initialized
 def seed_everything(seed: int):
-    """
-    Seeds random state for torch, numpy, and backend devices
+    """Seeds random state for torch, numpy, and backend devices
 
     :param int seed: the random seed to set
     """
@@ -63,8 +64,7 @@ def seed_everything(seed: int):
 
 
 def generate_seeds(rng: random.Random, size: int) -> List[int]:
-    """
-    Generates list of random seeds
+    """Generates list of random seeds
 
     :param random.Random rng: random number generator
     :param int size: length of the returned list
@@ -77,8 +77,7 @@ def generate_seeds(rng: random.Random, size: int) -> List[int]:
 
 @_assert_initialized
 def broadcast_seeds(seeds: List[int], device: torch.device) -> List[int]:
-    """
-    Broadcasts the random seeds from the master to all distributed workers
+    """Broadcasts the random seeds from the master to all distributed workers
 
     :param List[int] seeds: list of seeds to broadcast from the master
     :param torch.device device: the backend device
@@ -91,8 +90,8 @@ def broadcast_seeds(seeds: List[int], device: torch.device) -> List[int]:
 def setup_seeds(
     master_seed: int, epochs: int, device: torch.device
 ) -> Tuple[List[int], List[int]]:
-    """
-    Generates seeds from one master_seed.
+    """Generates seeds from one master_seed.
+
     Function returns (worker_seeds, shuffling_seeds), worker_seeds are later
     used to initialize per-worker random number generators (mostly for
     dropouts), shuffling_seeds are for RNGs resposible for reshuffling the
@@ -135,8 +134,7 @@ def setup_seeds(
 
 @_assert_initialized
 def get_world_size() -> int:
-    """
-    Gets distributed world size or returns 1 if distributed is not initialized
+    """Gets distributed world size or returns 1 if distributed is not initialized
 
     :return: the distributed world size
     :rtype: int
@@ -146,8 +144,7 @@ def get_world_size() -> int:
 
 @_assert_initialized
 def reduce_tensor(tensor: torch.Tensor) -> torch.Tensor:
-    """
-    All-reduces the tensor from all workers using sum operation
+    """All-reduces the tensor from all workers using sum operation
 
     :param torch.Tensor tensor: the tensor to all reduce over
     :return: the all-reduced tensor
@@ -158,8 +155,7 @@ def reduce_tensor(tensor: torch.Tensor) -> torch.Tensor:
 
 @_assert_initialized
 def get_rank() -> int:
-    """
-    Gets distributed rank or returns 0 if distributed is not initialized
+    """Gets distributed rank or returns 0 if distributed is not initialized
 
     :return: the distributed rank
     :rtype: int
@@ -169,8 +165,7 @@ def get_rank() -> int:
 
 @_assert_initialized
 def is_main_process() -> bool:
-    """
-    Returns trues if it is the master process
+    """Returns trues if it is the master process
 
     :return: true if it is the master process, false otherwise
     :rtype: bool
@@ -180,7 +175,5 @@ def is_main_process() -> bool:
 
 @_assert_initialized
 def barrier():
-    """
-    Distributed barrier to synchronize all processes
-    """
+    """Distributed barrier to synchronize all processes"""
     return _STRATEGY.barrier()
