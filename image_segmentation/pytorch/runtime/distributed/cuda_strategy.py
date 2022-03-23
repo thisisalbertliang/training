@@ -43,8 +43,7 @@ class CUDAStrategy(DistributedStrategy):
         return device
 
     def barrier(self):
-        """
-        Overrides DistributedStrategy.barrier
+        """Overrides DistributedStrategy.barrier
 
         Currently, pytorch doesn't implement barrier for NCCL backend.
         Thus, we call all_reduce on dummy tensor and synchronizes with GPU.
