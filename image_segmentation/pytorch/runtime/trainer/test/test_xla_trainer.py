@@ -33,7 +33,7 @@ class TestXLATrainer(unittest.TestCase):
             lr_decay_epochs=[],
             lr_decay_factor=1.0,
             loader="synthetic",
-            torch_xla=True,
+            device="xla",
         )
 
         init_distributed(self.flags)
@@ -59,8 +59,8 @@ class TestXLATrainer(unittest.TestCase):
         )
         self.input_size = (self.batch_size, 1) + self.image_size
 
-    def test_forward_and_backward_pass(self):
-        """Smoke test for forward & backward pass"""
+    def test_train_step(self):
+        """Smoke test for the forward pass, backward pass, and model weights update"""
         for num_workers in (1, 8):
             self.flags.num_workers = num_workers
 
@@ -85,8 +85,6 @@ class TestXLATrainer(unittest.TestCase):
             images = torch.zeros(size=self.input_size, device=self.device)
             labels = torch.zeros_like(images, device=self.device)
 
-            loss_value = xla_trainer.forward_pass(images, labels)
+            loss_value = xla_trainer.train_step(iteration=0, images=images, labels=labels)
 
             self.assertEqual(loss_value.size(), torch.Size([]))
-
-            xla_trainer.backward_pass(iteration=0, loss_value=loss_value)

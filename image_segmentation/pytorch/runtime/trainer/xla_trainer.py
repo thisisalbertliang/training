@@ -42,8 +42,11 @@ class XLATrainer(UNet3DTrainer):
         # Get hardware type
         self.hw_type = xm.xla_device_hw(self.device)
 
-    def forward_pass(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        """Overrides UNet3DTrainer.forward_pass"""
+    def train_step(
+        self, iteration: int, images: torch.Tensor, labels: torch.Tensor
+    ) -> torch.Tensor:
+        """Overrides UNet3DTrainer.train_step"""
+        # Run the model forward pass
         with torch_xla.amp.autocast(enabled=self.flags.amp):
             output = self.model(images)
             if self.hw_type == "GPU":
@@ -58,21 +61,21 @@ class XLATrainer(UNet3DTrainer):
                 xm.mark_step()
             loss_value /= self.flags.ga_steps
 
-        return loss_value
-
-    def backward_pass(self, iteration: int, loss_value: torch.Tensor):
-        """Overrides UNet3DTrainer.backward_pass"""
+        # Run the model backward pass
         if self.flags.amp:
             self.scaler.scale(loss_value).backward()
         else:
             loss_value.backward()
 
+        # Run the model weight updates
         if (iteration + 1) % self.flags.ga_steps == 0:
             if self.flags.amp:
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
                 xm.optimizer_step(self.optimizer)
+
+        return loss_value
 
     @staticmethod
     def get_optimizer(params, flags):
