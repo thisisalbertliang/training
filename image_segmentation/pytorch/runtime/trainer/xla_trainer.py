@@ -1,8 +1,11 @@
+import contextlib
+
 import torch
 import torch_xla.amp
 import torch_xla.amp.grad_scaler
 import torch_xla.amp.syncfree
 import torch_xla.core.xla_model as xm
+import torch_xla.debug.profiler as xp
 import torch_xla.distributed.parallel_loader as pl
 from runtime.trainer.unet3d_trainer import UNet3DTrainer
 
@@ -46,34 +49,16 @@ class XLATrainer(UNet3DTrainer):
         self, iteration: int, images: torch.Tensor, labels: torch.Tensor
     ) -> torch.Tensor:
         """Overrides UNet3DTrainer.train_step"""
-        # Run the model forward pass
-        with torch_xla.amp.autocast(enabled=self.flags.amp):
-            output = self.model(images)
-            if self.hw_type == "GPU":
-                # currently, running torch-xla on GPU requires sandwiching
-                # the loss value computation in between mark_step, otherwise
-                # the CUDA memory will be corrupted
-                # this is a temporary solution, and these two mark_step will
-                # be removed once this memory corruption bug is resolved in torch-xla
-                xm.mark_step()
-            loss_value = self.loss_fn(output, labels)
-            if self.hw_type == "GPU":
-                xm.mark_step()
-            loss_value /= self.flags.ga_steps
+        trace_context = (
+            xp.Trace("build_graph")
+            if hasattr(self, "profile_server")
+            else contextlib.nullcontext()
+        )
+        with trace_context:
+            loss_value = self._forward(images=images, labels=labels)
+            self._backward(loss_value=loss_value)
 
-        # Run the model backward pass
-        if self.flags.amp:
-            self.scaler.scale(loss_value).backward()
-        else:
-            loss_value.backward()
-
-        # Run the model weight updates
-        if (iteration + 1) % self.flags.ga_steps == 0:
-            if self.flags.amp:
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                xm.optimizer_step(self.optimizer)
+        self._optimizer_step(iteration=iteration)
 
         return loss_value
 
@@ -98,3 +83,37 @@ class XLATrainer(UNet3DTrainer):
             return optim
         else:
             return UNet3DTrainer.get_optimizer(params, flags)
+
+    def _forward(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        # Run the model forward pass
+        with torch_xla.amp.autocast(enabled=self.flags.amp):
+            output = self.model(images)
+            if self.hw_type == "GPU":
+                # currently, running torch-xla on GPU requires sandwiching
+                # the loss value computation in between mark_step, otherwise
+                # the CUDA memory will be corrupted
+                # this is a temporary solution, and these two mark_step will
+                # be removed once this memory corruption bug is resolved in torch-xla
+                xm.mark_step()
+            loss_value = self.loss_fn(output, labels)
+            if self.hw_type == "GPU":
+                xm.mark_step()
+            loss_value /= self.flags.ga_steps
+
+        return loss_value
+
+    def _backward(self, loss_value: torch.Tensor):
+        # Run the model backward pass
+        if self.flags.amp:
+            self.scaler.scale(loss_value).backward()
+        else:
+            loss_value.backward()
+
+    def _optimizer_step(self, iteration: int):
+        # Run the model weights update
+        if (iteration + 1) % self.flags.ga_steps == 0:
+            if self.flags.amp:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                xm.optimizer_step(self.optimizer)
