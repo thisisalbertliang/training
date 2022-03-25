@@ -100,8 +100,7 @@ class UNet3DTrainer(ABC):
                 for callback in self.callbacks:
                     callback.on_batch_start()
 
-                loss_value = self.forward_pass(images, labels)
-                self.backward_pass(iteration, loss_value)
+                loss_value = self.train_step(iteration=iteration, images=images, labels=labels)
 
                 loss_value = reduce_tensor(loss_value).detach().cpu().numpy()
                 cumulative_loss.append(loss_value)
@@ -193,24 +192,16 @@ class UNet3DTrainer(ABC):
 
             if is_successful or diverged:
                 break
-
+    
     @abstractmethod
-    def forward_pass(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        """Runs the model forward pass on the images and labels
-
-        :param torch.Tensor images: the input images with shape (batch_size, channel_size, x_size, y_size, z_size)
-        :param torch.Tensor labels: the labels associated with the input images from train data. Labels should have the same shape as the images
-        :return: the loss value
-        :rtype: torch.Tensor
-        """
-        pass
-
-    @abstractmethod
-    def backward_pass(self, iteration: int, loss_value: torch.Tensor):
-        """Runs the model backward pass, given the loss value from the forward pass
+    def train_step(self, iteration: int, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        """Runs a single train step, including the forward pass, backward pass, and model weights update
 
         :param int iteration: the iteration number in the current epoch
-        :param torch.Tensor loss_value: the loss value from the forward pass
+        :param torch.Tensor images: the input images with shape (batch_size, channel_size, x_size, y_size, z_size)
+        :param torch.Tensor labels: the labels associated with the input images from train data. Labels should have the same shape as the images
+        :return: the loss value between the predicted labels and the true labels
+        :rtype: torch.Tensor
         """
         pass
 
