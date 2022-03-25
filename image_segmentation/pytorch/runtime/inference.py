@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
 
-from runtime.distributed_utils import reduce_tensor, get_world_size, get_rank
+from runtime.distributed.distributed_utils import reduce_tensor, get_world_size, get_rank
 
 
 def evaluate(flags, model, loader, loss_fn, score_fn, device, epoch=0, is_distributed=False):

@@ -1,20 +1,22 @@
 #!/bin/bash
 set -e
+set -x
 
 # runs benchmark and reports time to convergence
 # to use the script:
 #   run_and_time.sh <random seed 1-5>
 
-SEED=${1:--1}
+SEED=0
 
-MAX_EPOCHS=4000
+MAX_EPOCHS=100
 QUALITY_THRESHOLD="0.908"
-START_EVAL_AT=1000
-EVALUATE_EVERY=20
+START_EVAL_AT=100
+EVALUATE_EVERY=500
 LEARNING_RATE="0.8"
 LR_WARMUP_EPOCHS=200
-DATASET_DIR="/data"
-BATCH_SIZE=2
+# DATASET_DIR="/home/albertliang/pytorch/data/kits19"
+DATASET_DIR="/gcs/albert-datasets-test/kits19"
+BATCH_SIZE=1
 GRADIENT_ACCUMULATION_STEPS=1
 
 
@@ -25,13 +27,10 @@ then
     start_fmt=$(date +%Y-%m-%d\ %r)
     echo "STARTING TIMING RUN AT $start_fmt"
 
-# CLEAR YOUR CACHE HERE
-  python -c "
-from mlperf_logging.mllog import constants
-from runtime.logging import mllog_event
-mllog_event(key=constants.CACHE_CLEAR, value=True)"
+    export GPU_NUM_DEVICES=8
+    # export XLA_USE_BF16=1
 
-  python main.py --data_dir ${DATASET_DIR} \
+  python3 main.py --data_dir ${DATASET_DIR} \
     --epochs ${MAX_EPOCHS} \
     --evaluate_every ${EVALUATE_EVERY} \
     --start_eval_at ${START_EVAL_AT} \
@@ -41,7 +40,10 @@ mllog_event(key=constants.CACHE_CLEAR, value=True)"
     --ga_steps ${GRADIENT_ACCUMULATION_STEPS} \
     --learning_rate ${LEARNING_RATE} \
     --seed ${SEED} \
-    --lr_warmup_epochs ${LR_WARMUP_EPOCHS}
+    --lr_warmup_epochs ${LR_WARMUP_EPOCHS} \
+    --input_shape 128 128 128 \
+    --debug \
+    --torch_xla
 
 	# end timing
 	end=$(date +%s)

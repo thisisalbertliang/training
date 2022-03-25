@@ -4,7 +4,6 @@ import copy
 import torch
 import numpy as np
 
-import os
 
 def process_performance_stats(timestamps, batch_size, mode):
     """ Get confidence intervals
@@ -30,8 +29,8 @@ def get_callbacks(flags, logger, local_rank, world_size):
         if not flags.benchmark:
             callbacks.append(EvaluationCallback(logger, metric="mean_dice", seed=flags.seed,
                                                 threshold=flags.quality_threshold))
-            if flags.save_ckpt_dir_path:
-                callbacks.append(CheckpointCallback(flags.save_ckpt_dir_path, metric="mean_dice", seed=flags.seed))
+            if flags.save_ckpt_path:
+                callbacks.append(CheckpointCallback(flags.save_ckpt_path, metric="mean_dice", seed=flags.seed))
         else:
             callbacks.append(
                 PerformanceCallback(logger, flags.batch_size * world_size * flags.ga_steps,
@@ -123,8 +122,8 @@ class EvaluationCallback(BaseCallback):
 
 
 class CheckpointCallback(BaseCallback):
-    def __init__(self, dir_path, metric, seed):
-        self._dir_path = dir_path
+    def __init__(self, path, metric, seed):
+        self._path = path
         self._main_metric = metric
         self._best_metric = 0.0
         self._best_state = {}
@@ -134,7 +133,7 @@ class CheckpointCallback(BaseCallback):
     def on_epoch_end(self, epoch, metrics, model, optimizer, *args, **kwargs):
         try:
             current_state_dict = model.module.state_dict()
-        except:
+        except torch.nn.modules.module.ModuleAttributeError:
             current_state_dict = model.state_dict()
         self._last_state = {'last_model_state_dict': current_state_dict,
                             'last_optimizer_state_dict': optimizer.state_dict()}
@@ -145,7 +144,4 @@ class CheckpointCallback(BaseCallback):
                                 **metrics}
 
     def on_fit_end(self, *args, **kwargs):
-        torch.save(
-            {**self._last_state, **self._best_state, "seed": self._seed}, 
-            os.path.join(self._dir_path, "final_state_dict.pt")
-        )
+        torch.save({**self._last_state, **self._best_state, "seed": self._seed}, self._path)

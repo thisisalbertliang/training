@@ -1,14 +1,14 @@
-import os
 import glob
+import os
+from argparse import Namespace
 
+import data_loading.data_loader.cuda_data_loader as cl
+import data_loading.data_loader.xla_data_loader as xl
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
-from torch.utils.data.distributed import DistributedSampler
-import torch_xla.distributed.parallel_loader as pl
-
-from data_loading.pytorch_loader import PytVal, PytTrain
+from data_loading.pytorch_loader import PytTrain, PytVal
 from runtime.logging import mllog_event
+from torch.utils.data import Dataset
 
 
 def list_files_with_pattern(path, files_pattern):
@@ -50,25 +50,42 @@ def get_data_split(path: str, num_shards: int, shard_id: int):
         else:
             imgs_train.append(case_img)
             lbls_train.append(case_lbl)
-    mllog_event(key='train_samples', value=len(imgs_train), sync=False)
-    mllog_event(key='eval_samples', value=len(imgs_val), sync=False)
+    mllog_event(key="train_samples", value=len(imgs_train), sync=False)
+    mllog_event(key="eval_samples", value=len(imgs_val), sync=False)
     imgs_val, lbls_val = split_eval_data(imgs_val, lbls_val, num_shards, shard_id)
     return imgs_train, imgs_val, lbls_train, lbls_val
 
 
 class SyntheticDataset(Dataset):
-    def __init__(self, channels_in=1, channels_out=3, shape=(128, 128, 128),
-                 device="cpu", layout="NCDHW", scalar=False):
+    def __init__(
+        self,
+        channels_in=1,
+        channels_out=3,
+        shape=(128, 128, 128),
+        device="cpu",
+        layout="NCDHW",
+        scalar=False,
+    ):
         shape = tuple(shape)
         x_shape = (channels_in,) + shape if layout == "NCDHW" else shape + (channels_in,)
-        self.x = torch.rand((32, *x_shape), dtype=torch.float32, device=device, requires_grad=False)
+        self.x = torch.rand(
+            (32, *x_shape), dtype=torch.float32, device=device, requires_grad=False
+        )
         if scalar:
-            self.y = torch.randint(low=0, high=channels_out - 1, size=(32, *shape), dtype=torch.int32,
-                                   device=device, requires_grad=False)
+            self.y = torch.randint(
+                low=0,
+                high=channels_out - 1,
+                size=(32, *shape),
+                dtype=torch.int32,
+                device=device,
+                requires_grad=False,
+            )
             self.y = torch.unsqueeze(self.y, dim=1 if layout == "NCDHW" else -1)
         else:
             y_shape = (channels_out,) + shape if layout == "NCDHW" else shape + (channels_out,)
-            self.y = torch.rand((32, *y_shape), dtype=torch.float32, device=device, requires_grad=False)
+            self.y = torch.rand(
+                (32, *y_shape), dtype=torch.float32, device=device, requires_grad=False
+            )
 
     def __len__(self):
         return 64
@@ -77,39 +94,44 @@ class SyntheticDataset(Dataset):
         return self.x[idx % 32], self.y[idx % 32]
 
 
-def get_data_loaders(flags, num_shards, global_rank, device):
+def get_data_loaders(flags: Namespace, num_shards: int, global_rank: int, device: torch.device):
+    """Initializes and returns (train_data_loader, val_data_loader)
+
+    :param Namespace flags: the runtime arguments
+    :param int num_shards: number of shards for the train dataset
+    :param int global_rank: global rank associated with the device
+    :param torch.device device: the device to use for MpDeviceLoader
+    :return: the tuple (train_loader, val_loader)
+    :rtype: Union[Tuple[pl.MpDeviceLoader, pl.MpDeviceLoader], Tuple[DataLoader, DataLoader]]
+    """
     if flags.loader == "synthetic":
         train_dataset = SyntheticDataset(scalar=True, shape=flags.input_shape, layout=flags.layout)
-        val_dataset = SyntheticDataset(scalar=True, shape=flags.val_input_shape, layout=flags.layout)
+        val_dataset = SyntheticDataset(
+            scalar=True, shape=flags.val_input_shape, layout=flags.layout
+        )
 
     elif flags.loader == "pytorch":
-        x_train, x_val, y_train, y_val = get_data_split(flags.data_dir, num_shards, shard_id=global_rank)
-        train_data_kwargs = {"patch_size": flags.input_shape, "oversampling": flags.oversampling, "seed": flags.seed}
+        x_train, x_val, y_train, y_val = get_data_split(
+            flags.data_dir, num_shards, shard_id=global_rank
+        )
+        train_data_kwargs = {
+            "patch_size": flags.input_shape,
+            "oversampling": flags.oversampling,
+            "seed": flags.seed,
+        }
         train_dataset = PytTrain(x_train, y_train, **train_data_kwargs)
         val_dataset = PytVal(x_val, y_val)
     else:
         raise ValueError(f"Loader {flags.loader} unknown. Valid loaders are: synthetic, pytorch")
 
-    train_sampler = DistributedSampler(train_dataset, seed=flags.seed, drop_last=True) if num_shards > 1 else None
-    val_sampler = None
-
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size=flags.batch_size,
-                                  shuffle=not flags.benchmark and train_sampler is None,
-                                  sampler=train_sampler,
-                                  num_workers=flags.num_workers,
-                                  pin_memory=True,
-                                  drop_last=True)
-    val_dataloader = DataLoader(val_dataset,
-                                batch_size=1,
-                                shuffle=not flags.benchmark and val_sampler is None,
-                                sampler=val_sampler,
-                                num_workers=flags.num_workers,
-                                pin_memory=True,
-                                drop_last=False)
-    
-    if flags.torch_xla:
-        train_dataloader = pl.MpDeviceLoader(train_dataloader, device)
-        val_dataloader = pl.MpDeviceLoader(val_dataloader, device)
-
-    return train_dataloader, val_dataloader
+    if flags.device == "xla":
+        train_loader, val_loader = xl.get_data_loaders(
+            flags, num_shards, global_rank, device, train_dataset, val_dataset
+        )
+    elif flags.device == "cuda":
+        train_loader, val_loader = cl.get_data_loaders(
+            flags, num_shards, train_dataset, val_dataset
+        )
+    else:
+        raise ValueError(f"Device {flags.device} unknown. Valid devices are: cuda, xla")
+    return train_loader, val_loader

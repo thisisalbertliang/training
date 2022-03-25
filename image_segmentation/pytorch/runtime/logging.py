@@ -6,12 +6,13 @@ from dllogger import StdOutBackend, Verbosity, JSONStreamBackend
 from mlperf_logging import mllog
 from mlperf_logging.mllog import constants
 
-from runtime.distributed_utils import get_rank, is_main_process, barrier
+from runtime.distributed.distributed_utils import get_rank, is_main_process, barrier
 
 CONSTANTS = constants
 mllogger = mllog.get_mllogger()
 
 
+# def get_dllogger(params, is_master: bool):
 def get_dllogger(params):
     backends = []
     if is_main_process():
@@ -65,7 +66,7 @@ def mlperf_submission_log():
 
     mllog_event(
         key=mllog.constants.SUBMISSION_ORG,
-        value='your-company')
+        value='google')
 
     mllog_event(
         key=mllog.constants.SUBMISSION_DIVISION,
@@ -77,7 +78,7 @@ def mlperf_submission_log():
 
     mllog_event(
         key=mllog.constants.SUBMISSION_PLATFORM,
-        value=f'your_platform')
+        value=f'gcp')
 
 
 def mlperf_run_param_log(flags):

@@ -1,11 +1,6 @@
 import torch.nn as nn
 
-from model.layers import (
-    DownsampleBlock,
-    InputBlock,
-    OutputLayer,
-    UpsampleBlock
-)
+from model.layers import DownsampleBlock, InputBlock, OutputLayer, UpsampleBlock
 
 
 class Unet3D(nn.Module):
@@ -22,18 +17,26 @@ class Unet3D(nn.Module):
         self.input_block = InputBlock(in_channels, input_dim, normalization, activation)
 
         self.downsample = nn.ModuleList(
-            [DownsampleBlock(i, o, normalization, activation, index=idx)
-             for idx, (i, o) in enumerate(zip(self.inp, self.out))]
+            [
+                DownsampleBlock(i, o, normalization, activation, index=idx)
+                for idx, (i, o) in enumerate(zip(self.inp, self.out))
+            ]
         )
-        self.bottleneck = DownsampleBlock(filters[-1], filters[-1], normalization, activation, index=4)
+        self.bottleneck = DownsampleBlock(
+            filters[-1], filters[-1], normalization, activation, index=4
+        )
         upsample = [UpsampleBlock(filters[-1], filters[-1], normalization, activation, index=0)]
-        upsample.extend([UpsampleBlock(i, o, normalization, activation, index=idx+1)
-                         for idx, (i, o) in enumerate(zip(reversed(self.out), reversed(self.inp)))])
+        upsample.extend(
+            [
+                UpsampleBlock(i, o, normalization, activation, index=idx + 1)
+                for idx, (i, o) in enumerate(zip(reversed(self.out), reversed(self.inp)))
+            ]
+        )
         self.upsample = nn.ModuleList(upsample)
         self.output = OutputLayer(input_dim, n_class)
 
         for name, v in self.named_parameters():
-            if 'weight' in name or 'bias' in name:
+            if "weight" in name or "bias" in name:
                 v.data *= float(weights_init_scale)
 
     def forward(self, x):

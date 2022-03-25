@@ -113,7 +113,7 @@ class RandomBrightnessAugmentation:
     def __call__(self, data):
         image = data["image"]
         if random.random() < self.prob:
-            factor = np.random.uniform(low=1.0-self.factor, high=1.0+self.factor, size=1)
+            factor = np.random.uniform(low=1.0 - self.factor, high=1.0 + self.factor, size=1)
             image = (image * (1 + factor)).astype(image.dtype)
             data.update({"image": image})
         return data
@@ -129,7 +129,9 @@ class GaussianNoise:
         image = data["image"]
         if random.random() < self.prob:
             scale = np.random.uniform(low=0.0, high=self.std)
-            noise = np.random.normal(loc=self.mean, scale=scale, size=image.shape).astype(image.dtype)
+            noise = np.random.normal(loc=self.mean, scale=scale, size=image.shape).astype(
+                image.dtype
+            )
             data.update({"image": image + noise})
         return data
 
@@ -149,6 +151,10 @@ class PytTrain(Dataset):
         data = {"image": np.load(self.images[idx]), "label": np.load(self.labels[idx])}
         data = self.rand_crop(data)
         data = self.train_transforms(data)
+
+        if len(np.unique(data["label"])) > 3:
+            print(f"ALBERT DEBUG: label is corrupted: {data['label']}")
+
         return data["image"], data["label"]
 
 
@@ -161,9 +167,3 @@ class PytVal(Dataset):
 
     def __getitem__(self, idx):
         return np.load(self.images[idx]), np.load(self.labels[idx])
-
-
-
-
-
-
