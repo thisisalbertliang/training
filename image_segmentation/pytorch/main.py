@@ -51,6 +51,7 @@ def main(local_rank, flags):
 
     dllogger = get_dllogger(flags)
     device = get_device(local_rank)
+
     world_size = get_world_size()
     local_rank = get_rank()
     worker_seeds, shuffling_seeds = setup_seeds(

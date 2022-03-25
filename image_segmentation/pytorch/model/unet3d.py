@@ -5,6 +5,10 @@ from model.layers import DownsampleBlock, InputBlock, OutputLayer, UpsampleBlock
 
 class Unet3D(nn.Module):
     def __init__(self, in_channels, n_class, normalization, activation, weights_init_scale=1.0):
+
+        # in_channels = 1
+        # n_class = 3
+
         super(Unet3D, self).__init__()
 
         filters = [32, 64, 128, 256, 320]
@@ -13,6 +17,8 @@ class Unet3D(nn.Module):
         self.inp = filters[:-1]
         self.out = filters[1:]
         input_dim = filters[0]
+
+        # input_dim = 32
 
         self.input_block = InputBlock(in_channels, input_dim, normalization, activation)
 
