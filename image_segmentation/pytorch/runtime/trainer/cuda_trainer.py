@@ -43,24 +43,28 @@ class CUDATrainer(UNet3DTrainer):
         # Setup train sampler
         self.train_sampler = self.train_loader.sampler
 
-    def forward_pass(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        """Overrides UNet3DTrainer.forward_pass"""
+    def train_step(
+        self, iteration: int, images: torch.Tensor, labels: torch.Tensor
+    ) -> torch.Tensor:
+        """Overrides UNet3DTrainer.train_step"""
+        # Run the model forward pass
         with torch.cuda.amp.autocast(enabled=self.flags.amp):
             output = self.model(images)
             loss_value = self.loss_fn(output, labels)
             loss_value /= self.flags.ga_steps
-        return loss_value
 
-    def backward_pass(self, iteration: int, loss_value: torch.Tensor):
-        """Overrides UNet3DTrainer.backward_pass"""
+        # Run the model backward pass
         if self.flags.amp:
             self.scaler.scale(loss_value).backward()
         else:
             loss_value.backward()
 
+        # Run the model weights update
         if (iteration + 1) % self.flags.ga_steps == 0:
             if self.flags.amp:
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
             else:
                 self.optimizer.step()
+
+        return loss_value
