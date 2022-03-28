@@ -1,12 +1,12 @@
 import os
 
-import torch
 import dllogger as logger
-from dllogger import StdOutBackend, Verbosity, JSONStreamBackend
+import torch
+from dllogger import JSONStreamBackend, StdOutBackend, Verbosity
 from mlperf_logging import mllog
 from mlperf_logging.mllog import constants
 
-from runtime.distributed_utils import get_rank, is_main_process, barrier
+from runtime.distributed.distributed_utils import barrier, get_rank, is_main_process
 
 CONSTANTS = constants
 mllogger = mllog.get_mllogger()
