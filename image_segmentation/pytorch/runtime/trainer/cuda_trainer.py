@@ -1,3 +1,4 @@
+import contextlib
 import torch
 import torch.backends.cudnn
 import torch.cuda.amp
@@ -68,3 +69,7 @@ class CUDATrainer(UNet3DTrainer):
                 self.optimizer.step()
 
         return loss_value
+    
+    def get_step_trace_context(self):
+        """TODO: Implement step trace context for PyTorch CUDA"""
+        return contextlib.nullcontext()

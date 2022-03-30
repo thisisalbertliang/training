@@ -1,11 +1,9 @@
-import contextlib
 import time
 from abc import ABC, abstractmethod
 from argparse import Namespace
 from typing import Iterator
 
 import torch
-import torch_xla.debug.profiler as xp
 from model.unet3d import Unet3D
 from runtime.distributed.distributed_utils import get_world_size, reduce_tensor
 from runtime.inference import evaluate
@@ -51,10 +49,6 @@ class UNet3DTrainer(ABC):
                 gamma=flags.lr_decay_factor,
             )
 
-        # Start and persist the profiler server
-        if self.flags.profile_port:
-            self.profile_server = xp.start_server(self.flags.profile_port)
-
     def train(self):
         """Trains the UNet3D model"""
         is_successful = False
@@ -98,11 +92,7 @@ class UNet3DTrainer(ABC):
 
             loss_value = None
             for iteration, batch in enumerate(self.train_loader):
-                step_trace_context = (
-                    xp.StepTrace("train_unet3d")
-                    if hasattr(self, "profile_server")
-                    else contextlib.nullcontext()
-                )
+                step_trace_context = self.get_step_trace_context()
                 with step_trace_context:
                     self.optimizer.zero_grad()
 
@@ -218,6 +208,10 @@ class UNet3DTrainer(ABC):
         :rtype: torch.Tensor
         """
         pass
+
+    @abstractmethod
+    def get_step_trace_context(self):
+        """Gets a step trace context for performance profiling of the current train step"""
 
     @staticmethod
     def lr_warmup(

@@ -1,4 +1,5 @@
 import contextlib
+from typing import Union
 
 import torch
 import torch_xla.amp
@@ -45,15 +46,19 @@ class XLATrainer(UNet3DTrainer):
         # Get hardware type
         self.hw_type = xm.xla_device_hw(self.device)
 
+        # Start and persist the profiler server
+        if self.flags.profile_port:
+            self.profile_server = xp.start_server(self.flags.profile_port)
+
     def train_step(
         self, iteration: int, images: torch.Tensor, labels: torch.Tensor
     ) -> torch.Tensor:
         """Overrides UNet3DTrainer.train_step"""
-        trace_context = (
-            xp.Trace("build_graph")
-            if hasattr(self, "profile_server")
-            else contextlib.nullcontext()
-        )
+        if self.flags.profile_port:
+            trace_context = xp.Trace("build_graph")
+        else:
+            trace_context = contextlib.nullcontext()
+        # trace the forward and backward pass
         with trace_context:
             loss_value = self._forward(images=images, labels=labels)
             self._backward(loss_value=loss_value)
@@ -61,6 +66,13 @@ class XLATrainer(UNet3DTrainer):
         self._optimizer_step(iteration=iteration)
 
         return loss_value
+
+    def get_step_trace_context(self) -> Union[xp.StepTrace, contextlib.nullcontext]:
+        """Overrides UNet3DTrainer.get_step_trace_context"""
+        if self.flags.profile_port:
+            return xp.StepTrace("train_unet3d")
+        else:
+            return contextlib.nullcontext()
 
     @staticmethod
     def get_optimizer(params, flags):
