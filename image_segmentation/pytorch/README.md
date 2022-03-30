@@ -208,3 +208,48 @@ The validation dataset is composed of 42 volumes. They were pre-selected, and th
 A valid score is obtained as an average `mean_dice` score across the whole 42 volumes. Please mind that a multi-worker training in popular frameworks is using so-called samplers to shard the data.
 Such samplers tend to shard the data equally across all workers. For convenience, this is achieved by either truncating the dataset, so it is divisible by the number of workers,
 or the "missing" data is copied. This most likely will influence the final score - a valid evaluation is performed on exactly 42 volumes and each volume's score has a weight of 1/42 of the total sum of the scores. 
+
+# 4. PyTorch/XLA Performance Profiling
+
+For PyTorch/XLA users who are training the UNet3D model with the `--device xla` flag turned on, you can optionally profile the performance of PyTorch/XLA by providing `--profile_port ${PROFILE_PORT}` to `main.py` and running `capture_profile.py` along with it. The detailed steps for PyTorch/XLA performance profiling are outlined below.
+
+## Step 1: Launch `main.py` with `--profile_port ${PROFILE_PORT}`
+For example, to launch `main.py` with `profile_port = 9001`, run
+```shell
+python3 main.py --data_dir ${DATASET_DIR} \
+  --epochs ${MAX_EPOCHS} \
+  --evaluate_every ${EVALUATE_EVERY} \
+  --start_eval_at ${START_EVAL_AT} \
+  --quality_threshold ${QUALITY_THRESHOLD} \
+  --batch_size ${BATCH_SIZE} \
+  --optimizer sgd \
+  --ga_steps ${GRADIENT_ACCUMULATION_STEPS} \
+  --learning_rate ${LEARNING_RATE} \
+  --seed ${SEED} \
+  --lr_warmup_epochs ${LR_WARMUP_EPOCHS} \
+  --debug \
+  --device xla \
+  --profile_port 9001
+```
+
+## Step 2: Launch `capture_profile.py`
+Once the training has started, open a separate shell session and run `capture_profile.py` to trace its performance. Make sure that the `service_addr` argument for `capture_profile.py` matches with the `profile_port` argument for the train script.
+
+For example:
+```shell
+python3 capture_profile.py --service_addr "localhost:9001" --logdir "gs://path/to/logdir" --duration_ms 30000
+```
+will trace the training performance for `30000` milliseconds upon starting and dump the output performance profile to `"gs://path/to/logdir"`
+
+## Step 3: View PyTorch/XLA Performance Profile using Tensorboard
+Once the output performance profile is saved, you can visualize it using Tensorboard on your machine.
+
+For example, if the output performance profile is saved at `"gs://path/to/logdir"`, you can run
+```
+tensorboard --logdir gs://path/to/logdir --port 8001
+```
+to launch tensorboard on port `8001`. Visit `http://localhost:8001/#profile` on your machine to view the performance profile.
+
+## Helpful Links
+* Tensorboard User Guide: https://www.tensorflow.org/tensorboard/get_started
+* Cloud TPU Guide on PyTorch/XLA Performance Profiling: https://cloud.google.com/tpu/docs/pytorch-xla-performance-profiling-tpu-vm
