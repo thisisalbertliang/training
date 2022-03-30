@@ -124,8 +124,7 @@ The complete list of the available parameters for the main.py script contains:
 ### Input/Output parameters
 * `--data_dir`: Set the input directory containing the dataset (Required, default: `None`).
 * `--log_dir`: Set the output directory for logs (default: `/tmp`).
-* `--save_ckpt_dir_path`: Directory path to save the checkpoint to (default: `None`). 
-* `--save_ckpt_every`: Epoch interval for saving the UNet3D model state dict (default: `None`, which only saves the model state dict after training ends)
+* `--save_ckpt_path`: Path with a filename to save the checkpoint to (default: `None`). 
 * `--load_ckpt_path`: Path with a filename to load the checkpoint from (default: `None`). 
 * `--loader`: Loader to use (default: `pytorch`).
 * `--local_rank`: Local rank for distributed training (default: `os.environ.get("LOCAL_RANK", 0)`).
@@ -142,12 +141,14 @@ The complete list of the available parameters for the main.py script contains:
 * `--layout`: Data layout (default: `NCDHW`. `NDHWC` is not implemented).
 * `--input_shape`: Input shape for images during training (default: `[128, 128, 128]`).
 * `--val_input_shape`: Input shape for images during evaluation (default: `[128, 128, 128]`).
-* `--seed`: Set random seed for reproducibility (default: `-1` - picks a random number from `/dev/urandom`).
+* `--seed`: Set random seed for reproducibility (default: `None` - picks a random number from `/dev/urandom`).
 * `--num_workers`: Number of workers used for dataloading (default: `8`).
 * `--benchmark`: Enable performance benchmarking (disabled by default). If the flag is set, the script runs in a benchmark mode - each iteration is timed and the performance result (in images per second) is printed at the end.
 * `--warmup_steps`: Used only for during benchmarking - the number of steps to skip (default: `200`). First iterations are usually much slower since the graph is being constructed. Skipping the initial iterations is required for a fair performance assessment.
 * `--amp`: Enable automatic mixed precision (disabled by default).
-* `--torch_xla`: Enable PyTorch/XLA acceleration (disabled by default)
+* `--device`: Select the backend device framework to use for running the model (default: `cuda`). Devices available:
+  * `cuda` - [PyTorch CUDA](https://pytorch.org/docs/stable/cuda.html)
+  * `xla` - [PyTorch/XLA](https://github.com/pytorch/xla)
 
 ### Optimizer parameters
 * `--optimizer`: Type of optimizer to use (default: `sgd`, choices=`sgd, adam, lamb`).
@@ -162,6 +163,7 @@ The complete list of the available parameters for the main.py script contains:
 
 ### Other parameters
 * `--verbose`: Whether to display `tqdm` progress bars during training (default: `False`).
+* `--debug`: Whether to log the train loss on every iteration (default: `False`).
 * `--oversampling`: Oversampling for biased crop (default: `0.4`).
 * `--overlap`: Overlap for sliding window (default: `0.5`).
 * `--cudnn_benchmark`: Whether to use cuDNN benchmark (default: `False`).

@@ -1,14 +1,14 @@
 import argparse
+import os
 
 PARSER = argparse.ArgumentParser(description="UNet-3D")
 
 PARSER.add_argument('--data_dir', dest='data_dir', required=True)
 PARSER.add_argument('--log_dir', dest='log_dir', type=str, default="/tmp")
-PARSER.add_argument('--save_ckpt_dir_path', dest='save_ckpt_dir_path', type=str, default="")
-PARSER.add_argument('--save_ckpt_every', dest="save_ckpt_every", type=int, default=None)
+PARSER.add_argument('--save_ckpt_path', dest='save_ckpt_path', type=str, default="")
 PARSER.add_argument('--load_ckpt_path', dest='load_ckpt_path', type=str, default="")
 PARSER.add_argument('--loader', dest='loader', default="pytorch", type=str)
-PARSER.add_argument("--local_rank", default=os.environ.get("LOCAL_RANK", 0), type=int)
+PARSER.add_argument('--local_rank', default=os.environ.get("LOCAL_RANK", 0), type=int)
 
 PARSER.add_argument('--epochs', dest='epochs', type=int, default=1)
 PARSER.add_argument('--quality_threshold', dest='quality_threshold', type=float, default=0.908)
@@ -36,6 +36,7 @@ PARSER.add_argument('--weight_decay', dest='weight_decay', type=float, default=0
 PARSER.add_argument('--evaluate_every', '--eval_every', dest='evaluate_every', type=int, default=None)
 PARSER.add_argument('--start_eval_at', dest='start_eval_at', type=int, default=None)
 PARSER.add_argument('--verbose', '-v', dest='verbose', action='store_true', default=False)
+PARSER.add_argument('--debug', dest='debug', action='store_true', default=False)
 PARSER.add_argument('--normalization', dest='normalization', type=str,
                     choices=['instancenorm', 'batchnorm'], default='instancenorm')
 PARSER.add_argument('--activation', dest='activation', type=str, choices=['relu', 'leaky_relu'], default='relu')
@@ -47,4 +48,4 @@ PARSER.add_argument('--cudnn_benchmark', dest='cudnn_benchmark', action='store_t
 PARSER.add_argument('--cudnn_deterministic', dest='cudnn_deterministic', action='store_true', default=False)
 
 # PyTorch/XLA specific args
-PARSER.add_argument('--torch_xla', dest='torch_xla', action='store_true', default=False)
+PARSER.add_argument('--device', dest='device', type=str, choices=['cuda', 'xla'], default='cuda')
