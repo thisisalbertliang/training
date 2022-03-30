@@ -92,8 +92,7 @@ class UNet3DTrainer(ABC):
 
             loss_value = None
             for iteration, batch in enumerate(self.train_loader):
-                step_trace_context = self.get_step_trace_context()
-                with step_trace_context:
+                with self.get_step_trace_context():
                     self.optimizer.zero_grad()
 
                     images, labels = batch
