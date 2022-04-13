@@ -1,9 +1,10 @@
 import argparse
+from time import sleep
 
 import torch_xla.debug.profiler as xp
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(
         description="Performs an on-demand profiling session on provided profiler servers."
     )
@@ -26,10 +27,22 @@ def main():
         "--duration_ms",
         dest="duration_ms",
         type=int,
-        default=30000,
+        default=10000,
         help="duration in milliseconds for tracing the server.",
     )
     parser.add_argument(
+        "--start_time",
+        dest="start_time",
+        type=float,
+        default=None,
+        help=(
+            "the number of seconds to sleep before starting the first profiling. "
+            "This could be a floating point number for subsecond precision. "
+            "Defaults to None, which skips sleeping."
+        ),
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--interactive",
         dest="interactive",
         type=str,
@@ -43,27 +56,71 @@ def main():
         ),
     )
 
-    flags = parser.parse_args()
+    def required_length(length):
+        class RequiredLength(argparse.Action):
+            def __call__(self, parser, args, values, option_string=None):
+                if len(values) != length:
+                    msg = f"Argument {self.dest} requires {length} arguments"
+                    raise argparse.ArgumentTypeError(msg)
+                setattr(args, self.dest, values)
+
+        return RequiredLength
+
+    group.add_argument(
+        "--automatic",
+        dest="automatic",
+        type=int,
+        nargs="+",
+        default=None,
+        action=required_length(2),
+        help=(
+            "run in automatic mode.\n"
+            "Requires 2 int type arguments.\n"
+            "The 1st argument specifies the number of profiles to capture.\n"
+            "The 2nd argument specifies the time gap (in seconds) between the profiles, "
+            "i.e. the next profiling will start X seconds after the previous profiling ends.\n"
+            'ex. "--automatic 100 60" captures 100 profiles every 60 seconds.\n'
+            "Defaults to None, which disables automatic mode."
+        ),
+    )
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
 
     def trace():
         xp.trace(
-            service_addr=flags.service_addr,
-            logdir=flags.logdir,
-            duration_ms=flags.duration_ms,
+            service_addr=args.service_addr,
+            logdir=args.logdir,
+            duration_ms=args.duration_ms,
         )
-        print(f"Saved profiling output to {flags.logdir}")
+        print(f"Saved profiling output to {args.logdir}")
 
     def request_user_confirmation():
         input("Press enter to start profiling:")
 
+    # optionally sleep for X seconds before starting the profiling
+    if args.start_time:
+        print(f"Profiling will start after {args.start_time} seconds...")
+        sleep(args.start_time)
+
     # Run performance profiling
-    if flags.interactive == "once":
+    if args.interactive == "once":
         request_user_confirmation()
         trace()
-    elif flags.interactive == "loop":
+    elif args.interactive == "loop":
         while True:
             request_user_confirmation()
             trace()
+    elif args.automatic:
+        num_profiles, time_gap = args.automatic
+        for i in range(num_profiles):
+            trace()
+            if i < num_profiles - 1:
+                print(f"The next profiling will start after {time_gap} seconds...")
+                sleep(time_gap)
     else:
         trace()
 
