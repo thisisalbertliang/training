@@ -92,29 +92,30 @@ class UNet3DTrainer(ABC):
 
             loss_value = None
             for iteration, batch in enumerate(self.train_loader):
-                self.optimizer.zero_grad()
+                with self.get_step_trace_context():
+                    self.optimizer.zero_grad()
 
-                images, labels = batch
-                images, labels = images.to(self.device), labels.to(self.device)
+                    images, labels = batch
+                    images, labels = images.to(self.device), labels.to(self.device)
 
-                for callback in self.callbacks:
-                    callback.on_batch_start()
+                    for callback in self.callbacks:
+                        callback.on_batch_start()
 
-                loss_value = self.train_step(iteration=iteration, images=images, labels=labels)
+                    loss_value = self.train_step(iteration=iteration, images=images, labels=labels)
 
-                loss_value = reduce_tensor(loss_value).detach().cpu().numpy()
-                cumulative_loss.append(loss_value)
-                # in debug mode, log the train loss on each iteration
-                if self.flags.debug:
-                    mllog_event(
-                        key="train_loss",
-                        value=loss_value,
-                        metadata={
-                            CONSTANTS.EPOCH_NUM: epoch,
-                            "iteration_num": iteration,
-                        },
-                        sync=False,
-                    )
+                    loss_value = reduce_tensor(loss_value).detach().cpu().numpy()
+                    cumulative_loss.append(loss_value)
+                    # in debug mode, log the train loss on each iteration
+                    if self.flags.debug:
+                        mllog_event(
+                            key="train_loss",
+                            value=loss_value,
+                            metadata={
+                                CONSTANTS.EPOCH_NUM: epoch,
+                                "iteration_num": iteration,
+                            },
+                            sync=False,
+                        )
 
             mllog_end(
                 key=CONSTANTS.EPOCH_STOP,
@@ -192,9 +193,11 @@ class UNet3DTrainer(ABC):
 
             if is_successful or diverged:
                 break
-    
+
     @abstractmethod
-    def train_step(self, iteration: int, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    def train_step(
+        self, iteration: int, images: torch.Tensor, labels: torch.Tensor
+    ) -> torch.Tensor:
         """Runs a single train step, including the forward pass, backward pass, and model weights update
 
         :param int iteration: the iteration number in the current epoch
@@ -204,6 +207,10 @@ class UNet3DTrainer(ABC):
         :rtype: torch.Tensor
         """
         pass
+
+    @abstractmethod
+    def get_step_trace_context(self):
+        """Gets a step trace context for performance profiling of the current train step"""
 
     @staticmethod
     def lr_warmup(

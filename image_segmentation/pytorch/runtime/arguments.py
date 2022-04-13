@@ -49,3 +49,4 @@ PARSER.add_argument('--cudnn_deterministic', dest='cudnn_deterministic', action=
 
 # PyTorch/XLA specific args
 PARSER.add_argument('--device', dest='device', type=str, choices=['cuda', 'xla'], default='cuda')
+PARSER.add_argument('--profile_port', dest='profile_port', type=int, default=None)
