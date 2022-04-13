@@ -1,4 +1,5 @@
 import argparse
+import sys
 from time import sleep
 
 import torch_xla.debug.profiler as xp
@@ -87,6 +88,16 @@ def parse_args():
     return parser.parse_args()
 
 
+def request_user_confirmation():
+    usr_input = input('Press "Enter" to start profiling / Press "q" to exit profiling:')
+    usr_input = usr_input.strip().lower()
+    if usr_input == "q" or usr_input == "quit":
+        print("Exiting gracefully...")
+        sys.exit()
+    elif usr_input:
+        raise ValueError(f"Unknown user input: {usr_input}")
+
+
 def main():
     args = parse_args()
 
@@ -97,9 +108,6 @@ def main():
             duration_ms=args.duration_ms,
         )
         print(f"Saved profiling output to {args.logdir}")
-
-    def request_user_confirmation():
-        input("Press enter to start profiling:")
 
     # optionally sleep for X seconds before starting the profiling
     if args.start_time:
