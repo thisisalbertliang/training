@@ -159,6 +159,10 @@ class UNet3DTrainer(ABC):
                 )
                 eval_metrics["train_loss"] = sum(cumulative_loss) / len(cumulative_loss)
 
+                # TODO: 
+                self.model.to(self.device)
+                self.optimizer = UNet3DTrainer.get_optimizer(self.model.parameters(), self.flags)
+
                 mllog_event(
                     key=CONSTANTS.EVAL_ACCURACY,
                     value=eval_metrics["mean_dice"],

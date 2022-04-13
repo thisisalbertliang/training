@@ -1,5 +1,6 @@
 import glob
 import os
+import pdb
 from argparse import Namespace
 
 import data_loading.data_loader.cuda_data_loader as cl
@@ -36,7 +37,15 @@ def split_eval_data(x_val, y_val, num_shards, shard_id):
 
 
 def get_data_split(path: str, num_shards: int, shard_id: int):
-    with open("evaluation_cases.txt", "r") as f:
+    evaluation_cases_path = os.path.join(
+        os.path.dirname(    # pytorch directory
+            os.path.dirname(    # data_loading directory
+                os.path.dirname(__file__) # data_loader directory
+            )
+        ),
+        "evaluation_cases.txt",
+    )
+    with open(evaluation_cases_path, "r") as f:
         val_cases_list = f.readlines()
     val_cases_list = [case.rstrip("\n") for case in val_cases_list]
     imgs = load_data(path, "*_x.npy")

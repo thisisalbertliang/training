@@ -5,17 +5,17 @@ from scipy import signal
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
-from runtime.distributed.distributed_utils import (
-    get_rank,
-    get_world_size,
-    reduce_tensor,
-)
+from runtime.distributed.distributed_utils import get_rank, reduce_tensor
 
 
 def evaluate(flags, model, loader, loss_fn, score_fn, device, epoch=0, is_distributed=False):
     rank = get_rank()
-    world_size = get_world_size()
-    model.to(device)
+    
+    # TODO: 
+    eval_device = torch.device('cpu') if flags.device == "xla" else device
+
+    model.to(eval_device)
+    
     if flags.load_ckpt_path:
         map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
         checkpoint = torch.load(flags.load_ckpt_path, map_location=map_location)
@@ -33,7 +33,7 @@ def evaluate(flags, model, loader, loss_fn, score_fn, device, epoch=0, is_distri
     with torch.no_grad():
         for i, batch in enumerate(tqdm(loader, disable=(rank != 0) or not flags.verbose)):
             image, label = batch
-            image, label = image.to(device), label.to(device)
+            image, label = image.to(eval_device), label.to(eval_device)
             if image.numel() == 0:
                 continue
             with autocast(enabled=flags.amp):
@@ -47,13 +47,16 @@ def evaluate(flags, model, loader, loss_fn, score_fn, device, epoch=0, is_distri
                     padding_val=-2.2
                 )
                 eval_loss_value = loss_fn(output, label)
-                scores.append(score_fn(output, label))
+                eval_loss_value = eval_loss_value.to(device)
+                score = score_fn(output, label)
+                score = score.to(device)
+                scores.append(score)
             eval_loss.append(eval_loss_value)
             del output
             del label
 
-    scores = reduce_tensor(torch.mean(torch.stack(scores, dim=0), dim=0), world_size)
-    eval_loss = reduce_tensor(torch.mean(torch.stack(eval_loss, dim=0), dim=0), world_size)
+    scores = reduce_tensor(torch.mean(torch.stack(scores, dim=0), dim=0))
+    eval_loss = reduce_tensor(torch.mean(torch.stack(eval_loss, dim=0), dim=0))
     # scores = torch.mean(torch.stack(scores, dim=0), dim=0)
     # eval_loss = torch.mean(torch.stack(eval_loss, dim=0), dim=0)
 
