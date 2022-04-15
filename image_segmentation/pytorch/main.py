@@ -44,7 +44,6 @@ def main(local_rank, flags):
     is_distributed = init_distributed(flags)
 
     mllog.config(filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), "unet3d.log"))
-    mllog.config(filename=os.path.join("results", "unet3d.log"))
     mllogger = mllog.get_mllogger()
     mllogger.logger.propagate = False
     mllog_start(key=constants.INIT_START)
